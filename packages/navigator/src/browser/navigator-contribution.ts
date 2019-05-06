@@ -218,7 +218,6 @@ export class FileNavigatorContribution extends AbstractViewContribution<FileNavi
             order: 'z2'
         });
 
-        this.updateAddRemoveFolderActions(registry);
         this.workspacePreferences.onPreferenceChanged(change => {
             if (change.preferenceName === 'workspace.supportMultiRootWorkspace') {
                 this.updateAddRemoveFolderActions(registry);
@@ -316,14 +315,14 @@ export class FileNavigatorContribution extends AbstractViewContribution<FileNavi
         }
     }
 
-    private readonly toDispoaseAddRemoveFolderActions = new DisposableCollection();
+    private readonly toDisposeAddRemoveFolderActions = new DisposableCollection();
     private updateAddRemoveFolderActions(registry: MenuModelRegistry): void {
-        this.toDispoaseAddRemoveFolderActions.dispose();
+        this.toDisposeAddRemoveFolderActions.dispose();
         if (this.workspacePreferences['workspace.supportMultiRootWorkspace']) {
-            this.toDispoaseAddRemoveFolderActions.push(registry.registerMenuAction(NavigatorContextMenu.WORKSPACE, {
+            this.toDisposeAddRemoveFolderActions.push(registry.registerMenuAction(NavigatorContextMenu.WORKSPACE, {
                 commandId: WorkspaceCommands.ADD_FOLDER.id
             }));
-            this.toDispoaseAddRemoveFolderActions.push(registry.registerMenuAction(NavigatorContextMenu.WORKSPACE, {
+            this.toDisposeAddRemoveFolderActions.push(registry.registerMenuAction(NavigatorContextMenu.WORKSPACE, {
                 commandId: WorkspaceCommands.REMOVE_FOLDER.id
             }));
         }

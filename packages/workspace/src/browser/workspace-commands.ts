@@ -14,7 +14,7 @@
  * SPDX-License-Identifier: EPL-2.0 OR GPL-2.0 WITH Classpath-exception-2.0
  ********************************************************************************/
 
-import { inject, injectable } from 'inversify';
+import { inject, injectable, postConstruct } from 'inversify';
 import URI from '@theia/core/lib/common/uri';
 import { SelectionService } from '@theia/core/lib/common/selection-service';
 import { Command, CommandContribution, CommandRegistry } from '@theia/core/lib/common/command';
@@ -169,6 +169,52 @@ export class WorkspaceCommandContribution implements CommandContribution {
     @inject(WorkspaceDeleteHandler) protected readonly deleteHandler: WorkspaceDeleteHandler;
     @inject(WorkspaceDuplicateHandler) protected readonly duplicateHandler: WorkspaceDuplicateHandler;
     @inject(WorkspaceCompareHandler) protected readonly compareHandler: WorkspaceCompareHandler;
+    @inject(CommandRegistry) protected readonly commandRegistry: CommandRegistry;
+
+    @postConstruct()
+    protected async onAfterInit(): Promise<void> {
+        // Wait for the preferences service to be ready, and re-register the correct multi-root commands.
+        this.preferences.ready.then(() => {
+            const registry = this.commandRegistry;
+            // Unregister the placeholder `Add Folder` command.
+            registry.unregisterCommand(WorkspaceCommands.ADD_FOLDER);
+            // Unregister the placeholder `Remove Folder` command.
+            registry.unregisterCommand(WorkspaceCommands.REMOVE_FOLDER);
+            // Register the correct `Add` and `Remove` folder commands.
+            registry.registerCommand(WorkspaceCommands.ADD_FOLDER, this.newMultiUriAwareCommandHandler({
+                isEnabled: () => this.workspaceService.isMultiRootWorkspaceOpened,
+                isVisible: uris => !uris.length || this.areWorkspaceRoots(uris),
+                execute: async uris => {
+                    const uri = await this.fileDialogService.showOpenDialog({
+                        title: WorkspaceCommands.ADD_FOLDER.label!,
+                        canSelectFiles: false,
+                        canSelectFolders: true
+                    });
+                    if (!uri) {
+                        return;
+                    }
+                    const workspaceSavedBeforeAdding = this.workspaceService.saved;
+                    await this.addFolderToWorkspace(uri);
+                    if (!workspaceSavedBeforeAdding) {
+                        const saveCommand = registry.getCommand(WorkspaceCommands.SAVE_WORKSPACE_AS.id);
+                        if (saveCommand && await new ConfirmDialog({
+                            title: 'Folder added to Workspace',
+                            msg: 'A workspace with multiple roots was created. Do you want to save your workspace configuration as a file?',
+                            ok: 'Yes',
+                            cancel: 'No'
+                        }).open()) {
+                            registry.executeCommand(saveCommand.id);
+                        }
+                    }
+                }
+            }));
+            registry.registerCommand(WorkspaceCommands.REMOVE_FOLDER, this.newMultiUriAwareCommandHandler({
+                execute: uris => this.removeFolderFromWorkspace(uris),
+                isEnabled: () => this.workspaceService.isMultiRootWorkspaceOpened,
+                isVisible: uris => this.areWorkspaceRoots(uris) && this.workspaceService.saved
+            }));
+        });
+    }
 
     registerCommands(registry: CommandRegistry): void {
         this.openerService.getOpeners().then(openers => {
@@ -262,39 +308,17 @@ export class WorkspaceCommandContribution implements CommandContribution {
         registry.registerCommand(WorkspaceCommands.FILE_DUPLICATE, this.newMultiUriAwareCommandHandler(this.duplicateHandler));
         registry.registerCommand(WorkspaceCommands.FILE_DELETE, this.newMultiUriAwareCommandHandler(this.deleteHandler));
         registry.registerCommand(WorkspaceCommands.FILE_COMPARE, this.newMultiUriAwareCommandHandler(this.compareHandler));
-        this.preferences.ready.then(() => {
-            registry.registerCommand(WorkspaceCommands.ADD_FOLDER, this.newMultiUriAwareCommandHandler({
-                isEnabled: () => this.workspaceService.isMultiRootWorkspaceOpened,
-                isVisible: uris => !uris.length || this.areWorkspaceRoots(uris),
-                execute: async uris => {
-                    const uri = await this.fileDialogService.showOpenDialog({
-                        title: WorkspaceCommands.ADD_FOLDER.label!,
-                        canSelectFiles: false,
-                        canSelectFolders: true
-                    });
-                    if (!uri) {
-                        return;
-                    }
-                    const workspaceSavedBeforeAdding = this.workspaceService.saved;
-                    await this.addFolderToWorkspace(uri);
-                    if (!workspaceSavedBeforeAdding) {
-                        const saveCommand = registry.getCommand(WorkspaceCommands.SAVE_WORKSPACE_AS.id);
-                        if (saveCommand && await new ConfirmDialog({
-                            title: 'Folder added to Workspace',
-                            msg: 'A workspace with multiple roots was created. Do you want to save your workspace configuration as a file?',
-                            ok: 'Yes',
-                            cancel: 'No'
-                        }).open()) {
-                            registry.executeCommand(saveCommand.id);
-                        }
-                    }
-                }
-            }));
-            registry.registerCommand(WorkspaceCommands.REMOVE_FOLDER, this.newMultiUriAwareCommandHandler({
-                execute: uris => this.removeFolderFromWorkspace(uris),
-                isEnabled: () => this.workspaceService.isMultiRootWorkspaceOpened,
-                isVisible: uris => this.areWorkspaceRoots(uris) && this.workspaceService.saved
-            }));
+        // Temporary `Add Folder` command.
+        registry.registerCommand(WorkspaceCommands.ADD_FOLDER, {
+            isEnabled: () => false,
+            isVisible: () => false,
+            execute: () => { }
+        });
+        // Placeholder `Remove Folder` command.
+        registry.registerCommand(WorkspaceCommands.REMOVE_FOLDER, {
+            isEnabled: () => false,
+            isVisible: () => false,
+            execute: () => { }
         });
     }
 

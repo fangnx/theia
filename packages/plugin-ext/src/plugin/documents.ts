@@ -249,6 +249,7 @@ export class DocumentsExtImpl implements DocumentsExt {
         }
         await this.proxy.$tryOpenDocument(uri, documentOptions);
 
+        // below block of code needs to be removed after fix https://github.com/theia-ide/theia/issues/5079
         if (!options) {
             const document = this.editorsAndDocuments.getDocument(uri.toString());
             await this.proxy.$tryCloseDocument(uri);

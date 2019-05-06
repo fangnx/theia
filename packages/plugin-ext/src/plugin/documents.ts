@@ -248,6 +248,13 @@ export class DocumentsExtImpl implements DocumentsExt {
             };
         }
         await this.proxy.$tryOpenDocument(uri, documentOptions);
+
+        if (!options) {
+            const document = this.editorsAndDocuments.getDocument(uri.toString());
+            await this.proxy.$tryCloseDocument(uri);
+            return document;
+        }
+
         return this.editorsAndDocuments.getDocument(uri.toString());
     }
 
